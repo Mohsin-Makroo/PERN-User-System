@@ -1,0 +1,151 @@
+TABLE CREATE:
+CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    contact VARCHAR(10) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    address TEXT,
+    password VARCHAR(100) NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    profile_image TEXT
+);
+
+ADD USER FXN:
+CREATE OR REPLACE FUNCTION add_user(
+  p_first_name VARCHAR,
+  p_last_name VARCHAR,
+  p_contact VARCHAR,
+  p_email VARCHAR,
+  p_address TEXT,
+  p_password VARCHAR
+)
+RETURNS TABLE(
+  id INT,
+  first_name VARCHAR,
+  last_name VARCHAR,
+  contact VARCHAR,
+  email VARCHAR,
+  address TEXT,
+  is_active BOOLEAN,
+  is_deleted BOOLEAN
+)
+AS $$
+BEGIN
+  RETURN QUERY
+  INSERT INTO users (
+    first_name, last_name, contact, email, address, password
+  )
+  VALUES (
+    p_first_name, p_last_name, p_contact, p_email, p_address, p_password
+  )
+  RETURNING
+    users.id,
+    users.first_name,
+    users.last_name,
+    users.contact,
+    users.email,
+    users.address,
+    users.is_active,
+    users.is_deleted;
+END;
+$$ LANGUAGE plpgsql;
+
+
+GET ACTIVE USERS:
+CREATE OR REPLACE FUNCTION get_active_users()
+RETURNS TABLE(
+  id INT,
+  first_name VARCHAR,
+  last_name VARCHAR,
+  contact VARCHAR,
+  email VARCHAR,
+  address TEXT,
+  is_active BOOLEAN,
+  is_deleted BOOLEAN
+)
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    users.id,
+    users.first_name,
+    users.last_name,
+    users.contact,
+    users.email,
+    users.address,
+    users.is_active,
+    users.is_deleted
+  FROM users
+  WHERE users.is_deleted = FALSE
+  ORDER BY users.id;
+END;
+$$ LANGUAGE plpgsql;
+
+
+
+UPDATE USER FXN:
+CREATE OR REPLACE FUNCTION update_user_details(
+  p_id INT,
+  p_first_name VARCHAR,
+  p_last_name VARCHAR,
+  p_contact VARCHAR,
+  p_address TEXT
+)
+RETURNS TABLE(
+  id INT,
+  first_name VARCHAR,
+  last_name VARCHAR,
+  contact VARCHAR,
+  email VARCHAR,
+  address TEXT,
+  is_active BOOLEAN,
+  is_deleted BOOLEAN
+)
+AS $$
+BEGIN
+  RETURN QUERY
+  UPDATE users
+  SET
+    first_name = p_first_name,
+    last_name = p_last_name,
+    contact = p_contact,
+    address = p_address
+  WHERE users.id = p_id
+  RETURNING
+    users.id,
+    users.first_name,
+    users.last_name,
+    users.contact,
+    users.email,
+    users.address,
+    users.is_active,
+    users.is_deleted;
+END;
+$$ LANGUAGE plpgsql;
+
+
+
+TOGGLE USER STATUS:
+CREATE OR REPLACE FUNCTION toggle_user_status(p_id INT)
+RETURNS BOOLEAN
+AS $$
+DECLARE
+    new_status BOOLEAN;
+BEGIN
+    SELECT NOT is_active INTO new_status FROM users WHERE id = p_id;
+    UPDATE users SET is_active = new_status WHERE id = p_id;
+    RETURN new_status;
+END;
+$$ LANGUAGE plpgsql;
+
+
+SOFT DELETE:
+CREATE OR REPLACE PROCEDURE soft_delete_user_proc(p_id INT)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    UPDATE users SET is_deleted = TRUE WHERE id = p_id;
+END;
+$$;
