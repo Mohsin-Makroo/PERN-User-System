@@ -159,7 +159,7 @@ app.patch("/users/:id/profile-image", async (req, res) => {
   }
 });
 
-// ✅ OPTIMIZED BULK UPLOAD (15 lines instead of 80)
+// ✅ OPTIMIZED BULK UPLOAD (Fixed to return user data)
 app.post("/users/bulk-upload", async (req, res) => {
   const { users, userRole } = req.body;
   
@@ -172,8 +172,24 @@ app.post("/users/bulk-upload", async (req, res) => {
     const result = await pool.query("SELECT * FROM bulk_insert_users($1)", [JSON.stringify(users)]);
     
     const rows = result.rows;
-    const successful = rows.filter(r => r.success).map(r => ({ row: r.row_number, id: r.user_id }));
-    const failed = rows.filter(r => !r.success).map(r => ({ row: r.row_number, errors: [r.error_message] }));
+    
+    // ✅ FIX: Re-attach the original user object so the frontend can display names
+    // We use (r.row_number - 2) because row 2 corresponds to array index 0
+    const successful = rows
+      .filter(r => r.success)
+      .map(r => ({ 
+        row: r.row_number, 
+        data: users[r.row_number - 2], // <--- Restores the missing data
+        id: r.user_id 
+      }));
+
+    const failed = rows
+      .filter(r => !r.success)
+      .map(r => ({ 
+        row: r.row_number, 
+        data: users[r.row_number - 2], // <--- Restores the missing data for errors too
+        errors: [r.error_message] 
+      }));
     
     res.json({
       successful,
