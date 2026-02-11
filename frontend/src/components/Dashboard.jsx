@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 import DashboardContent from "./DashboardContent";
@@ -9,206 +9,109 @@ import BulkUpload from "./BulkUpload";
 
 function Dashboard({ user, onLogout, onProfileUpdate }) {
   const [activeMenu, setActiveMenu] = useState("dashboard");
-  const [showProfileModal, setShowProfileModal] = useState(false);
-  const [showUserFormModal, setShowUserFormModal] = useState(false);
-  const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
+  const [modals, setModals] = useState({ profile: false, userForm: false, bulkUpload: false });
   const [users, setUsers] = useState([]);
-  const [error, setError] = useState("");
-  const [form, setForm] = useState({
-    first_name: "", last_name: "", contact: "",
-    email: "", address: "", password: ""
-  });
+  const [form, setForm] = useState({ first_name: "", last_name: "", contact: "", email: "", address: "", password: "", role: "user" });
   const [editingId, setEditingId] = useState(null);
+  const [error, setError] = useState("");
 
-  // Helper functions
   const isAdmin = () => user?.role === 'admin';
-  const addUserRole = (data) => ({ ...data, userRole: user?.role });
+  const toggleModal = (name, state) => setModals({ ...modals, [name]: state });
+
+  useEffect(() => { loadUsers(); }, []);
 
   const loadUsers = async () => {
     try {
       const res = await fetch("http://localhost:5000/users");
       setUsers(await res.json());
     } catch (err) {
-      console.error("Failed to load users");
-    }
-  };
-
-  useEffect(() => { loadUsers(); }, []);
-  useEffect(() => { if (activeMenu === "users") loadUsers(); }, [activeMenu]);
-
-  const addOrUpdateUser = async (formData) => {
-    setError("");
-    const url = editingId ? `http://localhost:5000/users/${editingId}` : "http://localhost:5000/users";
-    const method = editingId ? "PUT" : "POST";
-
-    try {
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(addUserRole(formData))
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        return setError(data.error);
-      }
-
-      await loadUsers();
-      handleCloseUserModal();
-    } catch (err) {
-      setError("Operation failed");
-    }
-  };
-
-  const deleteUser = async (id) => {
-    if (!isAdmin()) return alert("Access Denied: Admin only");
-    if (!window.confirm("Are you sure you want to delete this user?")) return;
-
-    try {
-      await fetch(`http://localhost:5000/users/${id}`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(addUserRole({}))
-      });
-      await loadUsers();
-    } catch (err) {
-      alert("Failed to delete user");
-    }
-  };
-
-  const toggleStatus = async (id) => {
-    if (!isAdmin()) return alert("Access Denied: Admin only");
-
-    try {
-      await fetch(`http://localhost:5000/users/status/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(addUserRole({}))
-      });
-      await loadUsers();
-    } catch (err) {
-      alert("Failed to toggle status");
+      console.error(err);
     }
   };
 
   const handleAddUser = () => {
     if (!isAdmin()) return alert("Access Denied: Admin only");
-    setForm({ first_name: "", last_name: "", contact: "", email: "", address: "", password: "" });
+    setForm({ first_name: "", last_name: "", contact: "", email: "", address: "", password: "", role: "user" });
     setEditingId(null);
     setError("");
-    setShowUserFormModal(true);
+    toggleModal('userForm', true);
   };
 
-  const handleEditUser = (userData) => {
+  const handleEditUser = (u) => {
     if (!isAdmin()) return alert("Access Denied: Admin only");
-    setForm({ ...userData, password: "" });
-    setEditingId(userData.id);
+    setForm({ first_name: u.first_name, last_name: u.last_name, contact: u.contact, email: u.email, address: u.address, password: "", role: u.role || "user" });
+    setEditingId(u.id);
     setError("");
-    setShowUserFormModal(true);
+    toggleModal('userForm', true);
   };
 
-  const handleBulkUpload = () => {
+  const addOrUpdateUser = async (formData) => {
+    if (!isAdmin() && !editingId) return alert("Access Denied: Admin only");
+    try {
+      const res = await fetch(editingId ? `http://localhost:5000/users/${editingId}` : "http://localhost:5000/users", {
+        method: editingId ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...formData, userRole: user?.role })
+      });
+      const data = await res.json();
+      if (!res.ok) return setError(data.error);
+      await loadUsers();
+      toggleModal('userForm', false);
+      setEditingId(null);
+      setError("");
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const deleteUser = async (id) => {
+    if (!isAdmin() || !window.confirm("Are you sure you want to delete this user?")) return;
+    try {
+      const res = await fetch(`http://localhost:5000/users/${id}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userRole: user?.role }) });
+      if (res.ok) await loadUsers();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const toggleStatus = async (id) => {
     if (!isAdmin()) return alert("Access Denied: Admin only");
-    setShowBulkUploadModal(true);
-  };
-
-  const handleProfileImageUpload = (file) => {
-    // Simple validation - just check if file exists
-    if (!file) {
-      alert("Please select a file");
-      return;
-    }
-    
-    if (file.size > 2 * 1024 * 1024) {
-      alert("File size must be less than 2MB");
-      return;
-    }
-
-    const reader = new FileReader();
-    
-    reader.onload = async (e) => {
-      try {
-        const response = await fetch(`http://localhost:5000/users/${user.id}/profile-image`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ profile_image: e.target.result })
-        });
-
-        if (response.ok) {
-          onProfileUpdate({ ...user, profile_image: e.target.result });
-          alert("Profile image updated successfully!");
-        } else {
-          alert("Failed to update profile image");
-        }
-      } catch (err) {
-        alert("Failed to update profile image");
+    setUsers(prev => prev.map(u => u.id === id ? { ...u, is_active: !u.is_active } : u));
+    try {
+      const res = await fetch(`http://localhost:5000/users/status/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userRole: user?.role }) });
+      if (!res.ok) {
+        setUsers(prev => prev.map(u => u.id === id ? { ...u, is_active: !u.is_active } : u));
+        alert("Failed to toggle status");
       }
-    };
-
-    reader.onerror = () => {
-      alert("Failed to read file");
-    };
-
-    reader.readAsDataURL(file);
+    } catch (err) {
+      setUsers(prev => prev.map(u => u.id === id ? { ...u, is_active: !u.is_active } : u));
+      console.error(err);
+    }
   };
 
-  const handleCloseUserModal = () => {
-    setShowUserFormModal(false);
-    setEditingId(null);
-    setForm({ first_name: "", last_name: "", contact: "", email: "", address: "", password: "" });
-    setError("");
+  const handleProfileImageUpload = async (base64Image) => {
+    try {
+      const res = await fetch(`http://localhost:5000/users/${user.id}/profile-image`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profile_image: base64Image }) });
+      if (!res.ok) return alert("Failed to upload image");
+      onProfileUpdate({ ...user, profile_image: base64Image });
+      toggleModal('profile', false);
+    } catch (err) {
+      alert("Upload failed");
+    }
   };
 
   return (
-    <div className="dashboard">
+    <div className="dashboard-container">
       <Sidebar activeMenu={activeMenu} setActiveMenu={setActiveMenu} />
       <div className="main-content">
-        <Header user={user} activeMenu={activeMenu} onProfileClick={() => setShowProfileModal(true)} />
-        <div className="content">
-          {activeMenu === "dashboard" ? (
-            <DashboardContent user={user} users={users} />
-          ) : (
-            <UserManagement
-              users={users}
-              onAddUser={handleAddUser}
-              onBulkUpload={handleBulkUpload}
-              onEditUser={handleEditUser}
-              onToggleStatus={toggleStatus}
-              onDeleteUser={deleteUser}
-              userRole={user.role}
-            />
-          )}
+        <Header user={user} activeMenu={activeMenu} onProfileClick={() => toggleModal('profile', true)} />
+        <div className="content-area">
+          {activeMenu === "dashboard" ? <DashboardContent users={users} /> : <UserManagement users={users} user={user} onAddUser={handleAddUser} onEdit={handleEditUser} onDelete={deleteUser} onToggleStatus={toggleStatus} onBulkUpload={() => { if (!isAdmin()) return alert("Access Denied: Admin only"); toggleModal('bulkUpload', true); }} />}
         </div>
       </div>
-
-      {showProfileModal && (
-        <ProfileModal
-          user={user}
-          onClose={() => setShowProfileModal(false)}
-          onLogout={onLogout}
-          onProfileImageUpload={handleProfileImageUpload}
-        />
-      )}
-
-      {showUserFormModal && (
-        <UserFormModal
-          isOpen={showUserFormModal}
-          onClose={handleCloseUserModal}
-          onSubmit={addOrUpdateUser}
-          editingUser={editingId}
-          initialForm={form}
-          error={error}
-          isAdmin={isAdmin()}
-        />
-      )}
-
-      {showBulkUploadModal && (
-        <BulkUpload
-          onClose={() => setShowBulkUploadModal(false)}
-          onSuccess={loadUsers}
-          userRole={user.role}
-        />
-      )}
+      {modals.profile && <ProfileModal user={user} onClose={() => toggleModal('profile', false)} onLogout={onLogout} onImageUpload={handleProfileImageUpload} />}
+      {modals.userForm && <UserFormModal isOpen={modals.userForm} onClose={() => toggleModal('userForm', false)} onSubmit={addOrUpdateUser} editingUser={editingId} initialForm={form} error={error} />}
+      {modals.bulkUpload && <BulkUpload user={user} onClose={() => toggleModal('bulkUpload', false)} onComplete={() => { loadUsers(); toggleModal('bulkUpload', false); }} />}
     </div>
   );
 }

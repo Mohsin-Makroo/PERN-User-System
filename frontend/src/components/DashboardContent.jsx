@@ -1,39 +1,17 @@
-function DashboardContent({ user, users }) {
+import React from "react";
+
+function DashboardContent({ users }) {
+  const stats = [
+    { icon: "👥", value: users.length, label: "Total Users" },
+    { icon: "✅", value: users.filter(u => u.is_active).length, label: "Active Users" },
+    { icon: "👑", value: users.filter(u => u.role === 'admin').length, label: "Admin Users" }
+  ];
+
   return (
     <div className="dashboard-content">
-      <div className="welcome-section">
-        <h1>Welcome back, {user.first_name}!</h1>
-        <p>Here's what's happening with your users today.</p>
-      </div>
-
+      <div className="welcome-section"><h1>Welcome Back!</h1><p>Here's what's happening with your users today.</p></div>
       <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-icon">👥</div>
-          <div className="stat-content">
-            <div className="stat-value">{users.length}</div>
-            <div className="stat-label">Total Users</div>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-icon">✅</div>
-          <div className="stat-content">
-            <div className="stat-value">
-              {users.filter((u) => u.is_active).length}
-            </div>
-            <div className="stat-label">Active Users</div>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-icon">⏸️</div>
-          <div className="stat-content">
-            <div className="stat-value">
-              {users.filter((u) => !u.is_active).length}
-            </div>
-            <div className="stat-label">Inactive Users</div>
-          </div>
-        </div>
+        {stats.map((stat, i) => <div key={i} className="stat-card"><div className="stat-icon">{stat.icon}</div><div><div className="stat-value">{stat.value}</div><div className="stat-label">{stat.label}</div></div></div>)}
       </div>
     </div>
   );

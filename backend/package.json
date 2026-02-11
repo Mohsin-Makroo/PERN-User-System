@@ -12,6 +12,8 @@
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^5.2.1",
+    "json2csv": "^6.0.0-alpha.2",
+    "pdfkit": "^0.17.2",
     "pg": "^8.16.3"
   }
 }

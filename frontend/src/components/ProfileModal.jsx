@@ -1,85 +1,49 @@
-import { useState } from "react";
+import React, { useState } from "react";
 
-function ProfileModal({ user, onClose, onLogout, onProfileImageUpload }) {
+function ProfileModal({ user, onClose, onLogout, onImageUpload }) {
   const [selectedFile, setSelectedFile] = useState(null);
+  const [preview, setPreview] = useState(null);
 
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
-    if (file) {
-      setSelectedFile(file);
-    }
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) return alert("File size must be less than 2MB");
+    setSelectedFile(file);
+    const reader = new FileReader();
+    reader.onload = () => setPreview(reader.result);
+    reader.readAsDataURL(file);
   };
 
   const handleUpload = () => {
-    if (selectedFile) {
-      onProfileImageUpload(selectedFile);
+    if (preview) {
+      onImageUpload(preview);
       setSelectedFile(null);
+      setPreview(null);
     }
   };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal profile-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>Profile Settings</h3>
-          <button className="close-btn" onClick={onClose}>
-            ×
-          </button>
-        </div>
-
-        <div className="modal-content">
-          <div className="profile-info">
-            <div className="profile-avatar-large">
-              {user.profile_image ? (
-                <img src={user.profile_image} alt="Profile" />
-              ) : (
-                <span className="avatar-text">
-                  {user.first_name[0]}{user.last_name[0]}
-                </span>
-              )}
-            </div>
-
-            <div className="profile-details">
-              <h4>{user.first_name} {user.last_name}</h4>
-              <p>{user.email}</p>
-              {user.role === 'admin' && (
-                <span className="role-badge admin-badge">Admin</span>
-              )}
-            </div>
+      <div className="modal-content profile-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header"><h3>Profile</h3><button className="close-btn" onClick={onClose}>×</button></div>
+        <div className="profile-info">
+          <div className="profile-avatar-large">
+            {user.profile_image ? <img src={user.profile_image} alt="Profile" /> : <div className="avatar-text">{user.first_name.charAt(0).toUpperCase()}</div>}
           </div>
-
-          <div className="profile-image-upload">
-            <h4>Update Profile Picture</h4>
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/gif"
-              onChange={handleFileSelect}
-              id="profile-pic-upload"
-              style={{ display: "none" }}
-            />
-            <label htmlFor="profile-pic-upload" className="upload-btn-label">
-              Choose Image
-            </label>
-            {selectedFile && (
-              <div className="selected-file-info">
-                <span>{selectedFile.name}</span>
-                <button onClick={handleUpload} className="upload-confirm-btn">
-                  Upload
-                </button>
-              </div>
-            )}
-            <p className="upload-hint">Max 2MB (JPG, PNG, GIF)</p>
-          </div>
-
-          <div className="modal-actions">
-            <button onClick={onLogout} className="logout-button">
-              Sign Out
-            </button>
-            <button onClick={onClose} className="cancel-button">
-              Close
-            </button>
+          <div className="info-row"><span className="info-label">Name:</span><span className="info-value">{user.first_name} {user.last_name}</span></div>
+          <div className="info-row"><span className="info-label">Email:</span><span className="info-value">{user.email}</span></div>
+          <div className="info-row">
+            <span className="info-label">Role:</span>
+            <span className="info-value">{user.role === 'admin' ? <span className="admin-badge">Admin</span> : <span className="user-badge">User</span>}</span>
           </div>
         </div>
+        <div className="profile-image-upload">
+          <h4>Update Profile Picture</h4>
+          <label className="upload-btn-label"><input type="file" accept="image/*" onChange={handleFileSelect} style={{ display: "none" }} />Choose Image</label>
+          {selectedFile && <div className="selected-file-info"><p>{selectedFile.name}</p><button onClick={handleUpload} className="upload-confirm-btn">Upload</button></div>}
+          <p className="upload-hint">Max size: 2MB (JPG, PNG, GIF)</p>
+        </div>
+        <button onClick={onLogout} className="logout-button">Logout</button>
       </div>
     </div>
   );

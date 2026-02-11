@@ -1,151 +1,60 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 
-function UserFormModal({
-  isOpen,
-  onClose,
-  onSubmit,
-  editingUser,
-  initialForm,
-  error: externalError,
-}) {
+function UserFormModal({ isOpen, onClose, onSubmit, editingUser, initialForm, error }) {
   const [form, setForm] = useState(initialForm);
   const [showPwd, setShowPwd] = useState(false);
 
-  useEffect(() => {
-    setForm(initialForm);
-  }, [initialForm]);
-
-  const handleSubmit = async () => {
-    const result = await onSubmit(form);
-    if (result && result.success) {
-      setForm({
-        first_name: "",
-        last_name: "",
-        contact: "",
-        email: "",
-        address: "",
-        password: "",
-      });
-    }
-  };
+  useEffect(() => setForm(initialForm), [initialForm]);
 
   if (!isOpen) return null;
 
+  const fields = [
+    { label: "First Name", name: "first_name", type: "text", maxLength: 50, half: true },
+    { label: "Last Name", name: "last_name", type: "text", maxLength: 50, half: true },
+    { label: "Contact Number", name: "contact", type: "text", pattern: "\\d{10}", maxLength: 10, hint: "Exactly 10 digits" },
+    { label: "Email Address", name: "email", type: "email", disabled: editingUser, hint: "Must be @gmail.com" },
+    { label: "Address", name: "address", type: "textarea", rows: 3 },
+    { label: "Role", name: "role", type: "select", options: [{ value: "user", label: "User (View Only)" }, { value: "admin", label: "Admin (Full Access)" }] }
+  ];
+
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal form-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>{editingUser ? "Edit User" : "Add New User"}</h3>
-          <button className="close-btn" onClick={onClose}>
-            ×
-          </button>
-        </div>
-
-        <div className="modal-content">
-          <div className="modal-form">
-            <div className="form-grid">
-              <div className="form-group">
-                <label>First Name</label>
-                <input
-                  placeholder="Enter first name"
-                  value={form.first_name}
-                  onChange={(e) =>
-                    setForm({ ...form, first_name: e.target.value })
-                  }
-                />
+    <div className="modal-overlay">
+      <div className="modal-content">
+        <h2>{editingUser ? "Edit User" : "Add New User"}</h2>
+        {error && <div className="error-message">{error}</div>}
+        <form onSubmit={(e) => { e.preventDefault(); onSubmit(form); }}>
+          <div className="form-row">
+            {fields.filter(f => f.half).map(f => (
+              <div key={f.name} className="form-group">
+                <label>{f.label} *</label>
+                <input type={f.type} value={form[f.name]} onChange={(e) => setForm({ ...form, [f.name]: e.target.value })} required maxLength={f.maxLength} />
               </div>
-              <div className="form-group">
-                <label>Last Name</label>
-                <input
-                  placeholder="Enter last name"
-                  value={form.last_name}
-                  onChange={(e) =>
-                    setForm({ ...form, last_name: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label>Contact Number</label>
-              <input
-                placeholder="Enter 10-digit contact number"
-                value={form.contact}
-                onChange={(e) => setForm({ ...form, contact: e.target.value })}
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Email Address</label>
-              <input
-                placeholder="Enter email address"
-                value={form.email}
-                disabled={editingUser !== null}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className={editingUser !== null ? "disabled" : ""}
-              />
-              {editingUser && (
-                <span className="field-hint">Email cannot be changed</span>
-              )}
-            </div>
-
-            <div className="form-group">
-              <label>Address</label>
-              <textarea
-                placeholder="Enter address"
-                value={form.address}
-                onChange={(e) => setForm({ ...form, address: e.target.value })}
-                rows="3"
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Password</label>
-              <div className="password-input-wrapper">
-                <input
-                  type={showPwd ? "text" : "password"}
-                  placeholder={
-                    editingUser ? "Password cannot be edited" : "Enter password"
-                  }
-                  value={form.password}
-                  disabled={editingUser !== null}
-                  onChange={(e) =>
-                    setForm({ ...form, password: e.target.value })
-                  }
-                  className={editingUser !== null ? "disabled" : ""}
-                />
-                {!editingUser && (
-                  <button
-                    type="button"
-                    onClick={() => setShowPwd(!showPwd)}
-                    className="toggle-pwd-btn"
-                  >
-                    {showPwd ? "Hide" : "Show"}
-                  </button>
-                )}
-              </div>
-              {editingUser && (
-                <span className="field-hint">Password cannot be changed</span>
-              )}
-              {!editingUser && (
-                <span className="field-hint">
-                  8-12 chars with upper, lower, number & special (#$&@)
-                </span>
-              )}
-            </div>
-
-            {externalError && <div className="form-error">{externalError}</div>}
-
-            <div className="modal-actions">
-              <button onClick={onClose} className="cancel-button">
-                Cancel
-              </button>
-              <button onClick={handleSubmit} className="submit-button">
-                {editingUser ? "Update User" : "Add User"}
-              </button>
-            </div>
+            ))}
           </div>
-        </div>
+          {fields.filter(f => !f.half).map(f => (
+            <div key={f.name} className="form-group">
+              <label>{f.label} *</label>
+              {f.type === "textarea" ? <textarea value={form[f.name]} onChange={(e) => setForm({ ...form, [f.name]: e.target.value })} rows={f.rows} required /> :
+               f.type === "select" ? <select value={form[f.name]} onChange={(e) => setForm({ ...form, [f.name]: e.target.value })} required>{f.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select> :
+               <input type={f.type} value={form[f.name]} onChange={(e) => setForm({ ...form, [f.name]: e.target.value })} pattern={f.pattern} maxLength={f.maxLength} disabled={f.disabled} required />}
+              {f.hint && <small className="field-hint">{f.hint}</small>}
+            </div>
+          ))}
+          {!editingUser && (
+            <div className="form-group">
+              <label>Password *</label>
+              <div className="password-input-wrapper">
+                <input type={showPwd ? "text" : "password"} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} minLength="8" maxLength="12" required />
+                <button type="button" className="toggle-password" onClick={() => setShowPwd(!showPwd)}>{showPwd ? "🙈" : "👁️"}</button>
+              </div>
+              <small className="field-hint">8-12 chars, uppercase, lowercase, number, special (#,$,&,@)</small>
+            </div>
+          )}
+          <div className="modal-actions">
+            <button type="button" onClick={onClose} className="cancel-btn">Cancel</button>
+            <button type="submit" className="submit-btn">{editingUser ? "Update User" : "Add User"}</button>
+          </div>
+        </form>
       </div>
     </div>
   );

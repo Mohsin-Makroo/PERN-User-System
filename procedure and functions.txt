@@ -14,117 +14,70 @@ CREATE TABLE IF NOT EXISTS users (
 
 ADD USER FXN:
 CREATE OR REPLACE FUNCTION add_user(
-  p_first_name VARCHAR,
-  p_last_name VARCHAR,
-  p_contact VARCHAR,
-  p_email VARCHAR,
-  p_address TEXT,
-  p_password VARCHAR
-)
-RETURNS TABLE(
-  id INT,
-  first_name VARCHAR,
-  last_name VARCHAR,
-  contact VARCHAR,
-  email VARCHAR,
-  address TEXT,
-  is_active BOOLEAN,
-  is_deleted BOOLEAN
-)
-AS $$
+    p_first_name VARCHAR(50),
+    p_last_name VARCHAR(50),
+    p_contact VARCHAR(10),
+    p_email VARCHAR(255),
+    p_address TEXT,
+    p_password VARCHAR(12),
+    p_role VARCHAR(20)
+) RETURNS TABLE(id INT, email VARCHAR, role VARCHAR) AS $$
 BEGIN
-  RETURN QUERY
-  INSERT INTO users (
-    first_name, last_name, contact, email, address, password
-  )
-  VALUES (
-    p_first_name, p_last_name, p_contact, p_email, p_address, p_password
-  )
-  RETURNING
-    users.id,
-    users.first_name,
-    users.last_name,
-    users.contact,
-    users.email,
-    users.address,
-    users.is_active,
-    users.is_deleted;
+    -- Check email uniqueness - specify users.email to avoid ambiguity
+    IF EXISTS (SELECT 1 FROM users WHERE users.email = p_email AND users.is_deleted = false) THEN
+        RAISE EXCEPTION 'Email already exists';
+    END IF;
+    
+    -- Insert user and return data
+    RETURN QUERY
+    INSERT INTO users (first_name, last_name, contact, email, address, password, role)
+    VALUES (p_first_name, p_last_name, p_contact, p_email, p_address, p_password, p_role)
+    RETURNING users.id, users.email, users.role;
 END;
 $$ LANGUAGE plpgsql;
 
-
-GET ACTIVE USERS:
 CREATE OR REPLACE FUNCTION get_active_users()
 RETURNS TABLE(
-  id INT,
-  first_name VARCHAR,
-  last_name VARCHAR,
-  contact VARCHAR,
-  email VARCHAR,
-  address TEXT,
-  is_active BOOLEAN,
-  is_deleted BOOLEAN
-)
-AS $$
+    id INT, first_name VARCHAR(50), last_name VARCHAR(50),
+    contact VARCHAR(10), email VARCHAR(255), address TEXT,
+    is_active BOOLEAN, role VARCHAR(20), created_at TIMESTAMP
+) AS $$
 BEGIN
-  RETURN QUERY
-  SELECT
-    users.id,
-    users.first_name,
-    users.last_name,
-    users.contact,
-    users.email,
-    users.address,
-    users.is_active,
-    users.is_deleted
-  FROM users
-  WHERE users.is_deleted = FALSE
-  ORDER BY users.id;
+    RETURN QUERY 
+    SELECT users.id, users.first_name, users.last_name, users.contact,
+           users.email, users.address, users.is_active, users.role, users.created_at
+    FROM users WHERE is_deleted = false ORDER BY created_at DESC;
 END;
 $$ LANGUAGE plpgsql;
-
 
 
 UPDATE USER FXN:
 CREATE OR REPLACE FUNCTION update_user_details(
-  p_id INT,
-  p_first_name VARCHAR,
-  p_last_name VARCHAR,
-  p_contact VARCHAR,
-  p_address TEXT
-)
-RETURNS TABLE(
-  id INT,
-  first_name VARCHAR,
-  last_name VARCHAR,
-  contact VARCHAR,
-  email VARCHAR,
-  address TEXT,
-  is_active BOOLEAN,
-  is_deleted BOOLEAN
-)
-AS $$
+    p_id INT,
+    p_first_name VARCHAR(50),
+    p_last_name VARCHAR(50),
+    p_contact VARCHAR(10),
+    p_address TEXT,
+    p_role VARCHAR(20)
+) RETURNS TABLE(id INT, email VARCHAR, role VARCHAR) AS $$
 BEGIN
-  RETURN QUERY
-  UPDATE users
-  SET
-    first_name = p_first_name,
-    last_name = p_last_name,
-    contact = p_contact,
-    address = p_address
-  WHERE users.id = p_id
-  RETURNING
-    users.id,
-    users.first_name,
-    users.last_name,
-    users.contact,
-    users.email,
-    users.address,
-    users.is_active,
-    users.is_deleted;
+    -- Update user
+    UPDATE users
+    SET 
+        first_name = p_first_name,
+        last_name = p_last_name,
+        contact = p_contact,
+        address = p_address,
+        role = p_role
+    WHERE users.id = p_id AND is_deleted = false;
+    
+    -- Return updated user info
+    RETURN QUERY
+    SELECT users.id, users.email, users.role
+    FROM users
+    WHERE users.id = p_id;
 END;
 $$ LANGUAGE plpgsql;
-
 
 
 TOGGLE USER STATUS:
@@ -149,3 +102,139 @@ BEGIN
     UPDATE users SET is_deleted = TRUE WHERE id = p_id;
 END;
 $$;
+
+
+BULK UPLOAD:
+CREATE OR REPLACE FUNCTION bulk_insert_users(users_json TEXT)
+RETURNS TABLE(
+  row_number INT,
+  success BOOLEAN,
+  user_id INT,
+  error_message TEXT
+) AS $$
+DECLARE
+  user_data JSONB;
+  row_num INT := 2; -- Start at 2 (row 1 is header)
+  temp_first_name VARCHAR(50);
+  temp_last_name VARCHAR(50);
+  temp_contact VARCHAR(10);
+  temp_email VARCHAR(255);
+  temp_address TEXT;
+  temp_password VARCHAR(12);
+  validation_errors TEXT[];
+  inserted_id INT;
+BEGIN
+  -- Parse JSON array
+  FOR user_data IN SELECT * FROM jsonb_array_elements(users_json::JSONB)
+  LOOP
+    BEGIN
+      -- Extract fields
+      temp_first_name := TRIM(user_data->>'first_name');
+      temp_last_name := TRIM(user_data->>'last_name');
+      temp_contact := TRIM(user_data->>'contact');
+      temp_email := TRIM(LOWER(user_data->>'email'));
+      temp_address := TRIM(user_data->>'address');
+      temp_password := TRIM(user_data->>'password');
+      
+      validation_errors := ARRAY[]::TEXT[];
+      
+      -- ====================================
+      -- VALIDATION (All 12 rules)
+      -- ====================================
+      
+      -- Required fields
+      IF temp_first_name IS NULL OR temp_first_name = '' THEN
+        validation_errors := array_append(validation_errors, 'First name required');
+      END IF;
+      
+      IF temp_last_name IS NULL OR temp_last_name = '' THEN
+        validation_errors := array_append(validation_errors, 'Last name required');
+      END IF;
+      
+      IF temp_contact IS NULL OR temp_contact = '' THEN
+        validation_errors := array_append(validation_errors, 'Contact required');
+      END IF;
+      
+      IF temp_email IS NULL OR temp_email = '' THEN
+        validation_errors := array_append(validation_errors, 'Email required');
+      END IF;
+      
+      IF temp_address IS NULL OR temp_address = '' THEN
+        validation_errors := array_append(validation_errors, 'Address required');
+      END IF;
+      
+      IF temp_password IS NULL OR temp_password = '' THEN
+        validation_errors := array_append(validation_errors, 'Password required');
+      END IF;
+      
+      -- If required fields missing, return error and continue
+      IF array_length(validation_errors, 1) > 0 THEN
+        RETURN QUERY SELECT row_num, FALSE, NULL::INT, array_to_string(validation_errors, ', ');
+        row_num := row_num + 1;
+        CONTINUE;
+      END IF;
+      
+      -- Length validation
+      IF LENGTH(temp_first_name) > 50 THEN
+        validation_errors := array_append(validation_errors, 'First name max 50 chars');
+      END IF;
+      
+      IF LENGTH(temp_last_name) > 50 THEN
+        validation_errors := array_append(validation_errors, 'Last name max 50 chars');
+      END IF;
+      
+      -- Contact format validation (exactly 10 digits)
+      IF temp_contact !~ '^\d{10}$' THEN
+        validation_errors := array_append(validation_errors, 'Contact must be 10 digits');
+      END IF;
+      
+      -- Email validation (@gmail.com only)
+      IF temp_email !~ '^[a-zA-Z0-9._%+-]+@gmail\.com$' THEN
+        validation_errors := array_append(validation_errors, 'Email must be @gmail.com');
+      END IF;
+      
+      -- Password validation (8-12 chars, uppercase, lowercase, number, special char)
+      IF temp_password !~ '^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[#@$&]).{8,12}$' THEN
+        validation_errors := array_append(validation_errors, 'Password: 8-12 chars, upper, lower, number, special (#,$,&,@)');
+      END IF;
+      
+      -- If format validation failed, return error and continue
+      IF array_length(validation_errors, 1) > 0 THEN
+        RETURN QUERY SELECT row_num, FALSE, NULL::INT, array_to_string(validation_errors, ', ');
+        row_num := row_num + 1;
+        CONTINUE;
+      END IF;
+      
+      -- ====================================
+      -- DUPLICATE CHECK
+      -- ====================================
+      IF EXISTS (
+        SELECT 1 FROM users 
+        WHERE (email = temp_email OR contact = temp_contact) 
+        AND is_deleted = false
+      ) THEN
+        RETURN QUERY SELECT row_num, FALSE, NULL::INT, 'Email or contact already exists'::TEXT;
+        row_num := row_num + 1;
+        CONTINUE;
+      END IF;
+      
+      -- ====================================
+      -- INSERT USER
+      -- ====================================
+      INSERT INTO users (first_name, last_name, contact, email, address, password, role)
+      VALUES (temp_first_name, temp_last_name, temp_contact, temp_email, temp_address, temp_password, 'user')
+      RETURNING id INTO inserted_id;
+      
+      -- Return success
+      RETURN QUERY SELECT row_num, TRUE, inserted_id, NULL::TEXT;
+      row_num := row_num + 1;
+      
+    EXCEPTION
+      WHEN OTHERS THEN
+        -- Catch any unexpected errors
+        RETURN QUERY SELECT row_num, FALSE, NULL::INT, SQLERRM::TEXT;
+        row_num := row_num + 1;
+    END;
+  END LOOP;
+END;
+$$ LANGUAGE plpgsql;

@@ -1,28 +1,16 @@
+import React from "react";
+
 function Sidebar({ activeMenu, setActiveMenu }) {
+  const items = [
+    { id: "dashboard", icon: "📊", label: "Dashboard" },
+    { id: "users", icon: "👥", label: "User Registration" }
+  ];
+
   return (
     <div className="sidebar">
-      <div className="sidebar-header">
-        <div className="logo">
-          <div className="logo-icon">UM</div>
-          <span>UserMgmt</span>
-        </div>
-      </div>
-
+      <div className="sidebar-header"><div className="logo"><div className="logo-icon">UM</div><span>UserMgmt</span></div></div>
       <nav className="sidebar-nav">
-        <button
-          className={`nav-item ${activeMenu === "dashboard" ? "active" : ""}`}
-          onClick={() => setActiveMenu("dashboard")}
-        >
-          <span className="nav-icon">📊</span>
-          <span>Dashboard</span>
-        </button>
-        <button
-          className={`nav-item ${activeMenu === "users" ? "active" : ""}`}
-          onClick={() => setActiveMenu("users")}
-        >
-          <span className="nav-icon">👥</span>
-          <span>User Registration</span>
-        </button>
+        {items.map(item => <button key={item.id} className={`nav-item ${activeMenu === item.id ? "active" : ""}`} onClick={() => setActiveMenu(item.id)}><span className="nav-icon">{item.icon}</span>{item.label}</button>)}
       </nav>
     </div>
   );
